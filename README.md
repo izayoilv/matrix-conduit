@@ -1,31 +1,64 @@
 # matrix-conduit
 
-Flux-managed deployment of [Conduit](https://conduit.rs) (Matrix homeserver) on the kudofools k3s cluster.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Conduit](https://img.shields.io/badge/homeserver-Conduit-5b5bd6.svg)](https://conduit.rs)
+[![Matrix](https://img.shields.io/badge/domain-conduit.kudofools.dev-purple.svg)](https://conduit.kudofools.dev)
+[![Database](https://img.shields.io/badge/database-RocksDB-6b9d4e.svg)](https://rocksdb.org)
+[![Image](https://img.shields.io/badge/image-v0.10.12-2ea44f.svg)](https://hub.docker.com/r/matrixconduit/matrix-conduit)
+
+Flux-managed [Conduit](https://conduit.rs) Matrix homeserver on the kudofools k3s cluster.
+
+## Features
 
 - Homeserver: `conduit.kudofools.dev` (Matrix IDs look like `@user:conduit.kudofools.dev`)
-- Federation: enabled, delegated over port 443 via built-in `/.well-known/matrix/*` (Cloudflare Tunnel doesn't expose 8448)
-- Storage: RocksDB on a 5Gi `local-path` PVC at `/var/lib/matrix-conduit`
-- Secrets: registration token pulled from OpenBao (`kv/matrix-conduit/secrets`) via External Secrets Operator
+- Public federation delegated over port 443 via built-in `/.well-known/matrix/*` (Cloudflare Tunnel doesn't expose 8448)
+- Token-gated registration; token injected from OpenBao via External Secrets Operator
+- Runs unprivileged (UID 1000) with read-only root filesystem
 
-## Layout
+## Structure
 
 ```
 clusters/default/
-├── namespace.yaml      # matrix-conduit namespace
-├── pvc.yaml            # 5Gi local-path data volume
-├── configmap.yaml      # conduit.toml (server_name, federation, well-known)
-├── externalsecret.yaml # registration token from OpenBao
-├── deployment.yaml     # matrixconduit/matrix-conduit:v0.10.12
+├── namespace.yaml          # matrix-conduit namespace
+├── pvc.yaml                # 5Gi local-path data volume
+├── configmap.yaml          # conduit.toml
+├── externalsecret.yaml     # registration token from OpenBao
+├── deployment.yaml         # matrixconduit/matrix-conduit:v0.10.12
 ├── service.yaml
-├── ingress.yaml        # conduit.kudofools.dev -> conduit:6167
-└── networkpolicy.yaml  # ingress from kube-system (Traefik) only
+├── ingress.yaml            # conduit.kudofools.dev -> conduit:6167
+└── networkpolicy.yaml      # ingress from kube-system (Traefik) only
 ```
 
-Applied by Flux from the parent repo's `clusters/default/matrix-conduit.yaml` (GitRepository + Kustomization).
+## Configuration
+
+| Setting | Value | Notes |
+|---|---|---|
+| `server_name` | `conduit.kudofools.dev` | Defines your Matrix ID suffix |
+| `database_backend` / `database_path` | `rocksdb` / `/var/lib/matrix-conduit/` | Data on the PVC |
+| `port` / `address` | `6167` / `0.0.0.0` | Container needs non-loopback bind |
+| `max_request_size` | `20_000_000` | 20 MiB upload cap |
+| `allow_federation` | `true` | Public federation |
+| `allow_registration` | `true` | Token-gated; set `false` after onboarding |
+| `trusted_servers` | `["matrix.org"]` | Key fetching |
+| `[global.well_known]` | `conduit.kudofools.dev:443` | Delegates federation over 443 |
+
+Deployment-level:
+
+| Setting | Value |
+|---|---|
+| Image | `matrixconduit/matrix-conduit:v0.10.12` |
+| Config path | `CONDUIT_CONFIG=/etc/conduit/conduit.toml` |
+| Registration token | `CONDUIT_REGISTRATION_TOKEN` from `conduit-secrets` |
+| Service links | disabled (`enableServiceLinks: false`) — avoids `CONDUIT_PORT` env collision |
+
+## Prerequisites
+
+- kudofools cluster with Flux, OpenBao, ESO, and Cloudflare tunnel (see [kudofools-infra](https://forgejo.kudofools.dev/izayoilv/kudofools-infra))
+- OpenBao root token + unseal keys on the RPi5 (`~/.bao-keys.json`)
 
 ## Setup
 
-The cluster-side plumbing (DNS, tunnel route, Vault policy) lives in kudofools-infra (`opentofu/` and `clusters/default/matrix-conduit.yaml`). Once both repos are pushed, on the RPi5:
+The cluster-side plumbing (DNS, tunnel route, Vault policy, Flux resources) lives in kudofools-infra. On the RPi5:
 
 ```bash
 ROOT_TOKEN=$(jq -r '.root_token' ~/.bao-keys.json)
@@ -44,16 +77,23 @@ curl -s https://conduit.kudofools.dev/_matrix/client/versions
 curl -s https://conduit.kudofools.dev/.well-known/matrix/server
 ```
 
-Register an account at https://conduit.kudofools.dev with a token-capable client
-(e.g. [Element](https://app.element.io) → "Edit homeserver" → `https://conduit.kudofools.dev`),
-using the registration token above.
+Register an account at https://conduit.kudofools.dev with a token-capable client (e.g. the self-hosted [element-web](https://forgejo.kudofools.dev/izayoilv/element-web) or [Element](https://app.element.io) → "Edit homeserver").
 
-After creating your account(s), disable public registration by editing `clusters/default/configmap.yaml`
-(`allow_registration = false`), push, and restart: `kubectl rollout restart deployment -n matrix-conduit conduit`.
+After onboarding, disable public registration by editing `clusters/default/configmap.yaml` (`allow_registration = false`), push, and restart:
+
+```bash
+kubectl rollout restart deployment -n matrix-conduit conduit
+```
 
 ## Operations
 
-- **Reseal / pod restart**: unaffected by OpenBao resealing, but verify health with `kubectl logs -n matrix-conduit deploy/conduit`.
-- **Rotate registration token**: patch `kv/matrix-conduit/secrets` in OpenBao, then force ESO sync (step 2 above) and restart the deployment.
-- **Troubleshooting**: `kubectl logs -n matrix-conduit deploy/conduit`, `kubectl describe pod -n matrix-conduit`.
-- **Federation test**: https://federationtester.matrix.org
+| Task | Command |
+|---|---|
+| Check health | `kubectl get pods -n matrix-conduit` |
+| View logs | `kubectl logs -n matrix-conduit deploy/conduit` |
+| Rotate registration token | patch `kv/matrix-conduit/secrets` in OpenBao → force ESO sync → rollout restart |
+| Test federation | https://federationtester.matrix.org |
+
+## License
+
+[MIT](LICENSE) © 2026 IzayoiLv
