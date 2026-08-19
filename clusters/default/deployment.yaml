@@ -25,6 +25,7 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
+      enableServiceLinks: false
       containers:
         - name: conduit
           image: matrixconduit/matrix-conduit:v0.10.12
