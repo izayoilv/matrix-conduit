@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: conduit
+  namespace: matrix-conduit
+  labels:
+    app.kubernetes.io/name: matrix-conduit
+    app.kubernetes.io/instance: matrix-conduit-prod
+    app.kubernetes.io/part-of: kudofools
+    app.kubernetes.io/managed-by: flux
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: matrix-conduit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: matrix-conduit
+        app.kubernetes.io/instance: matrix-conduit-prod
+        app.kubernetes.io/part-of: kudofools
+        app.kubernetes.io/managed-by: flux
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: conduit
+          image: matrixconduit/matrix-conduit:v0.10.12
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+            runAsUser: 1000
+            runAsGroup: 1000
+            readOnlyRootFilesystem: true
+          ports:
+            - containerPort: 6167
+              name: http
+          env:
+            - name: CONDUIT_CONFIG
+              value: /etc/conduit/conduit.toml
+            - name: CONDUIT_REGISTRATION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: conduit-secrets
+                  key: registration_token
+          livenessProbe:
+            httpGet:
+              path: /_matrix/client/versions
+              port: 6167
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /_matrix/client/versions
+              port: 6167
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/conduit/conduit.toml
+              subPath: conduit.toml
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/matrix-conduit
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: conduit-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: conduit-data-pvc
+        - name: tmp
+          emptyDir: {}
