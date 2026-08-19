@@ -25,3 +25,18 @@ data:
     [global.well_known]
     server = "conduit.kudofools.dev:443"
     client = "https://conduit.kudofools.dev"
+
+    [global.media]
+    backend = "filesystem"
+
+    [[global.media.retention]]
+    space = "3G"
+
+    [[global.media.retention]]
+    scope = "remote"
+    accessed = "30d"
+    created = "90d"
+
+    [[global.media.retention]]
+    scope = "thumbnail"
+    space = "512MB"
