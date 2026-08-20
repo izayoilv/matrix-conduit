@@ -40,7 +40,10 @@ clusters/default/
 | `allow_federation` | `true` | Public federation |
 | `allow_registration` | `true` | Token-gated; set `false` after onboarding |
 | `trusted_servers` | `["matrix.org"]` | Key fetching |
+| `turn_uris` | `turn:turn.kudofools.dev:3478` (udp+tcp) | TURN relay (eturnal) |
 | `[global.well_known]` | `conduit.kudofools.dev:443` | Delegates federation over 443 |
+
+TURN secret is injected via `CONDUIT_TURN_SECRET` from OpenBao (`kv/matrix-conduit/secrets` → `TURN_SECRET`), matching eturnal's `secret`.
 
 Deployment-level:
 
@@ -51,39 +54,9 @@ Deployment-level:
 | Registration token | `CONDUIT_REGISTRATION_TOKEN` from `conduit-secrets` |
 | Service links | disabled (`enableServiceLinks: false`) — avoids `CONDUIT_PORT` env collision |
 
-## Prerequisites
-
-- kudofools cluster with Flux, OpenBao, ESO, and Cloudflare tunnel (see [kudofools-infra](https://forgejo.kudofools.dev/izayoilv/kudofools-infra))
-- OpenBao root token + unseal keys on the RPi5 (`~/.bao-keys.json`)
-
 ## Setup
 
-The cluster-side plumbing (DNS, tunnel route, Vault policy, Flux resources) lives in kudofools-infra. On the RPi5:
-
-```bash
-ROOT_TOKEN=$(jq -r '.root_token' ~/.bao-keys.json)
-REGISTRATION_TOKEN=$(openssl rand -base64 24)
-
-# 1. Store the registration token in OpenBao
-kubectl exec -n openbao openbao-0 -- env BAO_TOKEN=$ROOT_TOKEN bao kv put kv/matrix-conduit/secrets \
-  registration_token=$REGISTRATION_TOKEN
-
-# 2. Force ESO to sync it into the cluster
-kubectl annotate externalsecret -n matrix-conduit conduit-secrets force-sync=$(date +%s) --overwrite
-
-# 3. Verify Conduit is up
-kubectl get pods -n matrix-conduit
-curl -s https://conduit.kudofools.dev/_matrix/client/versions
-curl -s https://conduit.kudofools.dev/.well-known/matrix/server
-```
-
-Register an account at https://conduit.kudofools.dev with a token-capable client (e.g. the self-hosted [element-web](https://forgejo.kudofools.dev/izayoilv/element-web) or [Element](https://app.element.io) → "Edit homeserver").
-
-After onboarding, disable public registration by editing `clusters/default/configmap.yaml` (`allow_registration = false`), push, and restart:
-
-```bash
-kubectl rollout restart deployment -n matrix-conduit conduit
-```
+Full onboarding steps (seeding the registration token and the TURN secret into OpenBao, ESO sync, registration, disabling public registration) are in [SETUP.md](SETUP.md).
 
 ## Operations
 

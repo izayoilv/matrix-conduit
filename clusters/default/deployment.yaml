@@ -49,6 +49,11 @@ spec:
                 secretKeyRef:
                   name: conduit-secrets
                   key: registration_token
+            - name: CONDUIT_TURN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: conduit-secrets
+                  key: TURN_SECRET
           livenessProbe:
             httpGet:
               path: /_matrix/client/versions

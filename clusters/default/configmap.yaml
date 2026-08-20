@@ -21,6 +21,7 @@ data:
     allow_check_for_updates = true
     trusted_servers = ["matrix.org"]
     enable_lightning_bolt = true
+    turn_uris = ["turn:turn.kudofools.dev:3478?transport=udp", "turn:turn.kudofools.dev:3478?transport=tcp"]
 
     [global.well_known]
     server = "conduit.kudofools.dev:443"
