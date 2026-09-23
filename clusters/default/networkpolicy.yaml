@@ -21,3 +21,10 @@ spec:
       ports:
         - port: 6167
           protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 6167
+          protocol: TCP
