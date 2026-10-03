@@ -28,7 +28,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: conduit
-          image: matrixconduit/matrix-conduit:v0.10.13
+          image: matrixconduit/matrix-conduit:v0.10.15
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
