@@ -54,18 +54,29 @@ spec:
                 secretKeyRef:
                   name: conduit-secrets
                   key: TURN_SECRET
+          startupProbe:
+            httpGet:
+              path: /_matrix/client/versions
+              port: 6167
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 24
           livenessProbe:
             httpGet:
               path: /_matrix/client/versions
               port: 6167
             initialDelaySeconds: 30
-            periodSeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /_matrix/client/versions
               port: 6167
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
           resources:
             limits:
               cpu: "1"
